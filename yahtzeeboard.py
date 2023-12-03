@@ -4,6 +4,7 @@ import tkinter.messagebox
 from player import *
 from dice import *
 from configuration import *
+from network import Network
 class YahtzeeBoard:
     # 각 카테고리에 해당하는 인덱스를 나타내는 상수
     UPPERTOTAL = 6
@@ -14,7 +15,7 @@ class YahtzeeBoard:
     diceButtons = []  # diceButton 리스트
     fields = []  # 각 플레이어 점수판 2차원 리스트
                  # 열은 플레이어의 수, 행은 각 카테고리 13행 + upperScore + upperBouns + LowerScore + Total
-    players =[]  # player 객체 리스트
+    players = [Player('ME'), Player('Opponont')]  # player 객체 리스트
     numPlayers = 0
     player = 0  # 플레이어 순서 제어
     round = 0  # 13 라운드를 제어
@@ -22,39 +23,25 @@ class YahtzeeBoard:
 
     def __init__(self):
         self.initPlayers()
+        self.network = Network()
 
     def initPlayers(self):
         """ player window를 생성하고 """
         self.pwindow = Tk()
         self.Tempfont = font.Font(size=16, weight='bold', family='Consolas')
-        self.label = []
-        self.entry = []
-        self.label.append(Label(self.pwindow, text="플레이어 명수", font=self.Tempfont))
-        self.label[0].grid(row=0, column=0)
-
-        for i in range(1, 11):
-            self.label.append(Label(self.pwindow, text="플레이어" + str(i) + "이름", font=self.Tempfont))
-            self.label[i].grid(row=i, column=0)
-
-        for i in range(11):
-            self.entry.append(Entry(self.pwindow, font=self.Tempfont))
-            self.entry[i].grid(row=i, column=0)
-
-        Button(self.pwindow, text="설정 완료!", font=self.Tempfont, command=self.playerNames).grid(row=11, column=0)
+        Button(self.pwindow, text="설정 완료!", font=self.Tempfont, command=self.connectToServer).grid(row=11, column=0)
         self.pwindow.mainloop()
 
-    def playerNames(self):
+    def connectToServer(self):
         """ 플레이어 설정 완료 버튼 누르면 실행되는 함수 """
-        self.numPlayers = int(self.entry[0].get())
-        for i in range(1, self.numPlayers + 1):
-            self.players.append(Player(str(self.entry[i].get())))
+        self.numPlayers = 2
         self.pwindow.destroy()
         self.initInterface()  # Yacht 보드판 생성
 
     def initInterface(self):
         """ Yacht 보드 윈도우 생성 """
-        self.window = Tk("Yacht Dice!")
-        self.window.geometry("1800x800")
+        self.window = Tk("Yacht Dice Online!")
+        self.window.geometry("1200x800")
         self.Tempfont = font.Font(size=16, weight='bold', family='Consolas')
 
         # dice 객체 5개 생성
@@ -73,7 +60,7 @@ class YahtzeeBoard:
 
         for i in range(self.TOTAL + 2):  # i행의 점수를 나타냄
             Label(self.window, text=Configuration.configs[i], font=self.Tempfont).grid(row=i, column=1)
-            for j in range(self.numPlayers):  # j열의 플레이어를 나타냄
+            for j in range(self.numPlayers):  # ME 플레이어만 버튼을 누를 수 있음.
                 if i == 0:  # 플레이어 이름 표시
                     Label(self.window, text=self.players[j].toString(), font=self.Tempfont).grid(row=i, column=2 + j)
                 else:
@@ -83,7 +70,7 @@ class YahtzeeBoard:
                     self.fields[i-1].append(Button(self.window, text="", font=self.Tempfont, width=8,
                                                    command=lambda row=i-1: self.categoryListener(row)))
                     self.fields[i-1][j].grid(row=i, column=2+j)
-                    # 현재 플레이어가 아니거나 누를 필요없는 버튼은 disable 시킴
+                    # 입력할 수 없는 버튼을 disable 시킴
                     if (j != self.player or (i-1) == self.UPPERTOTAL or (i-1) == self.UPPERBONUS
                         or (i-1) == self.LOWERTOTAL or (i-1) == self.TOTAL):
                         self.fields[i-1][j]['state'] = 'disabled'
