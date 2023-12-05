@@ -1,4 +1,4 @@
-# 각 플레이어가 할 수 있는 행동 정의
+
 class Player:
     # 사용자가 지정할 수 있는 카테고리의 개수를 나타내는 상수
     UPPER = 6
@@ -9,6 +9,7 @@ class Player:
         self.scores = [0 for i in range(self.UPPER + self.LOWER)]  # 13개의 카테고리 점수를 나타냄
         self.used = [False for i in range(self.UPPER + self.LOWER)]  # 각 카테고리의 사용 여부
         self.bonus = 0  # 보너스 점수 유무
+
 
     def setScore(self, score, index):
         """ 각 카테고리 별로 점수를 scores 리스트에 작성하는 함수 """
