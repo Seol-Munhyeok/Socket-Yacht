@@ -4,8 +4,12 @@ import tkinter.messagebox
 from player import *
 from dice import *
 from configuration import *
+from _thread import *
 from network import Network
+import threading
+import queue
 
+n = Network()
 
 class YahtzeeBoard:
     # 각 카테고리에 해당하는 인덱스를 나타내는 상수
@@ -26,7 +30,8 @@ class YahtzeeBoard:
 
     def __init__(self):
         self.initPlayers()
-        self.network = Network()
+        self.data_queue = queue.Queue()
+    # 백그라운드 스레드에서 메인 스레드로 데이터를 전달하기 위한 큐
 
     def initPlayers(self):
         """ player window를 생성하고 """
@@ -37,6 +42,9 @@ class YahtzeeBoard:
 
     def connectToServer(self):
         """ 플레이어 설정 완료 버튼 누르면 실행되는 함수 """
+        # 네트워크 객체 생성 후 서버와 연결
+        global n
+        n.connect()
         self.numPlayers = 2
         self.pwindow.destroy()
         self.initInterface()  # Yacht 보드판 생성
@@ -71,7 +79,7 @@ class YahtzeeBoard:
                         self.fields.append(list())
                     # i-1행에 플레이어 개수 만큼 버튼 추가하고, 이벤트 Listener를 설정
                     self.fields[i - 1].append(Button(self.window, text="", font=self.Tempfont, width=8,
-                                                     command=lambda row=i - 1: self.categoryListener(row)))
+                                                     command=lambda row=i - 1: self.startThread(row)))
                     self.fields[i - 1][j].grid(row=i, column=2 + j)
 
                     # 입력할 수 없는 버튼을 disable 시킴
@@ -83,6 +91,7 @@ class YahtzeeBoard:
         self.bottomLabel = Label(self.window, text=self.players[self.player].toString() +
                                                    " 차례: Roll Dice 버튼을 누르세요", width=40, font=self.Tempfont)
         self.bottomLabel.grid(row=self.TOTAL + 2, column=0)
+
         self.window.mainloop()
 
     def rollDiceListener(self):
@@ -162,6 +171,7 @@ class YahtzeeBoard:
 
     def categoryListener(self, row):
         """ 계산한 점수를 각 카테고리에 맞게 표시한다. """
+        global n
         if self.roll >= 1:
             score = Configuration.score(row, self.dice)  # 점수 계산
             index = row
@@ -175,16 +185,15 @@ class YahtzeeBoard:
                 self.fields[row][self.player].configure(text=str(score))
                 # 상대방에게 선택한 카테고리의 점수와 인덱스를 전송
                 try:
-                    network = Network()
-                    network.connect()
-                    opponent_data = network.send(str(score) + ',' + str(index))
+                    n.send(str(score) + ',' + str(index))
+                    opponent_data = n.receive()
                     if opponent_data is not None:
                         opponent_data = opponent_data.split(',')
                         print(opponent_data[0], opponent_data[1])
                 except Exception as e:
                     print(e)
             elif self.player == 1:
-                opponent_data = self.network.connect()
+                opponent_data = n.receive()
                 print(opponent_data[0], opponent_data[1])
                 self.players[self.player].setScore(int(opponent_data[0]), int(opponent_data[1]))
                 self.players[self.player].setAtUsed(int(opponent_data[1]))
@@ -214,5 +223,9 @@ class YahtzeeBoard:
                                                                             self.players[self.player].getLowerScore()))
             self.nextTurn()
 
+    def startThread(self, row):
+        thread1 = threading.Thread(target=self.categoryListener, args=(row,))
+        thread1.daemon = True
+        thread1.start()
 
 Y = YahtzeeBoard()
