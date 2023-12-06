@@ -1,5 +1,4 @@
 import socket
-import threading
 from _thread import *
 
 server = "192.168.124.155"

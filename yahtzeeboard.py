@@ -2,12 +2,15 @@ from tkinter import *
 from tkinter import font
 import tkinter.messagebox
 from player import *
+from dice import *
 from configuration import *
 from network import Network
 import threading
 import queue
 
-n = Network()
+# 이 클래스는 실제로 게임 창을 띄우는데 사용됩니다.
+n = Network()  # 각 클라이언트의 Network 객체 생성
+
 
 class YahtzeeBoard:
     # 각 카테고리에 해당하는 인덱스를 나타내는 상수
@@ -19,7 +22,7 @@ class YahtzeeBoard:
     diceButtons = []  # diceButton 리스트
     fields = []  # 각 플레이어 점수판 2차원 리스트
     # 열은 플레이어의 수, 행은 각 카테고리 13행 + upperScore + upperBouns + LowerScore + Total
-    players = [Player('ME'), Player('Opponont')]  # player 객체 리스트
+    players = [Player('Alice'), Player('Bob')]  # player 객체 리스트
     numPlayers = 0
     player = 0  # 플레이어 순서 제어
     round = 0  # 13 라운드를 제어
@@ -49,7 +52,7 @@ class YahtzeeBoard:
     def initInterface(self):
         """ Yacht 보드 윈도우 생성 """
         self.window = Tk("Yacht Dice Online!")
-        self.window.geometry("1200x800")
+        self.window.geometry("1000x800")
         self.Tempfont = font.Font(size=16, weight='bold', family='Consolas')
 
         # dice 객체 5개 생성
@@ -168,17 +171,47 @@ class YahtzeeBoard:
             self.diceButtons[row]['state'] = 'disabled'
             self.diceButtons[row]['bg'] = 'light gray'
 
+    def calculateSpecialScore(self):
+        # UPPER category가 전부 사용되었으면, UpperScore, UpperBonus 계산
+        if self.players[self.player].allUpperUsed():
+            self.fields[self.UPPERTOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore()))
+            if self.players[self.player].getUpperScore() > 63:
+                self.fields[self.UPPERBONUS][self.player].configure(text="35")
+            else:
+                self.fields[self.UPPERBONUS][self.player].configure(text="0")
+
+        # LOWER category가 전부 사용되었으면, LowerScore 계산
+        if self.players[self.player].allLowerUsed():
+            self.fields[self.LOWERTOTAL][self.player].configure(
+                text=str(self.players[self.player].getLowerScore()))
+
+        # 모든 category가 전부 사용되었으면 Total 계산
+        if self.players[self.player].allUpperUsed() and self.players[self.player].allLowerUsed():
+            if self.players[self.player].getUpperScore() > 63:
+                self.fields[self.TOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore()
+                                                                        + self.players[self.player].getLowerScore()
+                                                                        + 35))
+            else:
+                self.fields[self.TOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore() +
+                                                                        self.players[self.player].getLowerScore()))
+
     def receiveOpponentScore(self):
         # 상대방의 점수 업데이트
         global n
         opponent_data = n.receive()
         opponent_data = opponent_data.split(',')
         opponent_score = opponent_data[0]
-        opponent_index = opponent_data[1]
-        print(opponent_data[0], opponent_data[1])
+        opponent_index = opponent_data[1]  # index는 족보를 순서대로 나열했을 때의 인덱스를 의미
+        print(opponent_score, opponent_index)
+
         self.players[self.player].setScore(int(opponent_score), int(opponent_index))
         self.players[self.player].setAtUsed(int(opponent_index))
-        self.fields[int(opponent_index)][self.player].configure(text=str(opponent_score))
+        # GUI 상에는 인덱스 대신 행 번호로 접근하므로, 하위 카테고리는 행 번호로 조정한다.
+        if int(opponent_index) >= 6:
+            self.fields[int(opponent_index) + 2][self.player].configure(text=str(opponent_score))
+        else:
+            self.fields[int(opponent_index)][self.player].configure(text=str(opponent_score))
+        self.calculateSpecialScore()
         self.nextTurn()
 
     def categoryListener(self, row):
@@ -201,30 +234,8 @@ class YahtzeeBoard:
                 n.send(str(score) + ',' + str(index))
             except Exception as e:
                 print(e)
-                
-            # UPPER category가 전부 사용되었으면, UpperScore, UpperBonus 계산
-            if self.players[self.player].allUpperUsed():
-                self.fields[self.UPPERTOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore()))
-                if self.players[self.player].getUpperScore() > 63:
-                    self.fields[self.UPPERBONUS][self.player].configure(text="35")
-                else:
-                    self.fields[self.UPPERBONUS][self.player].configure(text="0")
 
-            # LOWER category가 전부 사용되었으면, LowerScore 계산
-            if self.players[self.player].allLowerUsed():
-                self.fields[self.LOWERTOTAL][self.player].configure(
-                    text=str(self.players[self.player].getLowerScore()))
-
-            # 모든 category가 전부 사용되었으면 Total 계산
-            if self.players[self.player].allUpperUsed() and self.players[self.player].allLowerUsed():
-                if self.players[self.player].getUpperScore() > 63:
-                    self.fields[self.TOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore()
-                                                                            + self.players[self.player].getLowerScore()
-                                                                            + 35))
-                else:
-                    self.fields[self.TOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore() +
-                                                                            self.players[self.player].getLowerScore()))
-
+            self.calculateSpecialScore()
             self.nextTurn()
 
     def startThread(self, row):

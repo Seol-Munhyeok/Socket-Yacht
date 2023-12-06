@@ -1,5 +1,7 @@
 import socket
 
+# 이 클래스는 여러 명의 클라이언트의 연결을 관리합니다.
+
 class Network:
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

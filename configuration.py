@@ -1,5 +1,7 @@
-from dice import *
 from collections import Counter
+
+# 이 클래스는 주사위 눈에 따라 족보에 맞는 점수를 계산합니다. 생성자가 없는 클래스입니다.
+
 
 class Configuration:
     configs = ["Category","Ones", "Twos","Threes","Fours","Fives","Sixes",
