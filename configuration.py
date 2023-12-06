@@ -87,7 +87,7 @@ class Configuration:
         """ 주사위 5개의 눈이 모두 같을 때, 고정 50점 """
         if d[0].getRoll() == d[1].getRoll() == d[2].getRoll() == d[3].getRoll() == d[4].getRoll():
             return 50
-        return  0
+        return 0
 
     def sumDie(d):
         """ 주사위 5개의 눈의 합을 구한다. """

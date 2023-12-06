@@ -2,10 +2,12 @@ from tkinter import *
 from tkinter import font
 import tkinter.messagebox
 from player import *
-from dice import *
 from configuration import *
 from network import Network
+import threading
+import queue
 
+n = Network()
 
 class YahtzeeBoard:
     # 각 카테고리에 해당하는 인덱스를 나타내는 상수
@@ -22,10 +24,11 @@ class YahtzeeBoard:
     player = 0  # 플레이어 순서 제어
     round = 0  # 13 라운드를 제어
     roll = 0  # 각 라운드 마다 3번 roll을 할 수 있음. 이를 제어.
-    network = Network()
 
     def __init__(self):
         self.initPlayers()
+        # 백그라운드 스레드에서 메인 스레드로 데이터를 전달하기 위한 큐
+        self.data_queue = queue.Queue()
 
     def initPlayers(self):
         """ player window를 생성하고 """
@@ -36,6 +39,9 @@ class YahtzeeBoard:
 
     def connectToServer(self):
         """ 플레이어 설정 완료 버튼 누르면 실행되는 함수 """
+        # 네트워크 객체 생성 후 서버와 연결
+        global n
+        n.connect()
         self.numPlayers = 2
         self.pwindow.destroy()
         self.initInterface()  # Yacht 보드판 생성
@@ -53,6 +59,9 @@ class YahtzeeBoard:
         self.rollDice = Button(self.window, text="Roll Dice", font=self.Tempfont, command=self.rollDiceListener)
         self.rollDice.grid(row=0, column=0)
 
+        # 상대방의 점수를 가져오는 버튼 생성
+        Button(self.window, text='점수 가져오기', font=self.Tempfont, command=self.startThread2).grid(row=6, column=0)
+
         # Dice 버튼 5개 생성
         for i in range(5):
             # 각 dice 버튼에 대한 이벤트를 diceListener와 연결한다.
@@ -66,13 +75,13 @@ class YahtzeeBoard:
                 if i == 0:  # 플레이어 이름 표시
                     Label(self.window, text=self.players[j].toString(), font=self.Tempfont).grid(row=i, column=2 + j)
                 else:
-                    # 플레이어가 'ME'일 때만 수행
                     if j == 0:  # 각 행마다 한 번씩 리스트 추가
                         self.fields.append(list())
                     # i-1행에 플레이어 개수 만큼 버튼 추가하고, 이벤트 Listener를 설정
                     self.fields[i - 1].append(Button(self.window, text="", font=self.Tempfont, width=8,
-                                                     command=lambda row=i - 1: self.categoryListener(row)))
+                                                     command=lambda row=i - 1: self.startThread(row)))
                     self.fields[i - 1][j].grid(row=i, column=2 + j)
+
                     # 입력할 수 없는 버튼을 disable 시킴
                     if (j != self.player or (i - 1) == self.UPPERTOTAL or (i - 1) == self.UPPERBONUS
                             or (i - 1) == self.LOWERTOTAL or (i - 1) == self.TOTAL):
@@ -123,26 +132,23 @@ class YahtzeeBoard:
         self.player = (self.player + 1) % self.numPlayers
         self.bottomLabel.configure(text=self.players[self.player].toString() + "차례: Roll Dice 버튼을 누르세요.")
 
-        # 현재 플레이어가 'ME'인 경우
-        if self.player == 0:
-            for i in range(self.TOTAL + 1):
-                for j in range(self.numPlayers):
-                    if j != self.player or i == self.UPPERTOTAL or i == self.UPPERBONUS \
-                            or i == self.LOWERTOTAL or i == self.TOTAL:
-                        self.fields[i][j]["state"] = "disabled"
-                        self.fields[i][j]["bg"] = "light gray"
-                    else:
-                        self.fields[i][j]["state"] = "normal"
-                        self.fields[i][j]["bg"] = "white"
-            for i in range(6):
-                if self.players[self.player].getUsed(i):
-                    self.fields[i][self.player]["state"] = "disabled"
-                    self.fields[i][self.player]["bg"] = "light gray"
-            for i in range(8, 15):
-                if self.players[self.player].getUsed(i - 2):
-                    self.fields[i][self.player]["state"] = "disabled"
-                    self.fields[i][self.player]["bg"] = "light gray"
-
+        for i in range(self.TOTAL + 1):
+            for j in range(self.numPlayers):
+                if j != self.player or i == self.UPPERTOTAL or i == self.UPPERBONUS\
+                        or i == self.LOWERTOTAL or i == self.TOTAL:
+                    self.fields[i][j]["state"] = "disabled"
+                    self.fields[i][j]["bg"] = "light gray"
+                else:
+                    self.fields[i][j]["state"] = "normal"
+                    self.fields[i][j]["bg"] = "white"
+        for i in range(6):
+            if self.players[self.player].getUsed(i):
+                self.fields[i][self.player]["state"] = "disabled"
+                self.fields[i][self.player]["bg"] = "light gray"
+        for i in range(8, 15):
+            if self.players[self.player].getUsed(i - 2):
+                self.fields[i][self.player]["state"] = "disabled"
+                self.fields[i][self.player]["bg"] = "light gray"
         # 라운드 수 체크
         if self.player == 0:
             self.round += 1
@@ -162,30 +168,40 @@ class YahtzeeBoard:
             self.diceButtons[row]['state'] = 'disabled'
             self.diceButtons[row]['bg'] = 'light gray'
 
+    def receiveOpponentScore(self):
+        # 상대방의 점수 업데이트
+        global n
+        opponent_data = n.receive()
+        opponent_data = opponent_data.split(',')
+        opponent_score = opponent_data[0]
+        opponent_index = opponent_data[1]
+        print(opponent_data[0], opponent_data[1])
+        self.players[self.player].setScore(int(opponent_score), int(opponent_index))
+        self.players[self.player].setAtUsed(int(opponent_index))
+        self.fields[int(opponent_index)][self.player].configure(text=str(opponent_score))
+        self.nextTurn()
+
     def categoryListener(self, row):
         """ 계산한 점수를 각 카테고리에 맞게 표시한다. """
+        global n
         if self.roll >= 1:
             score = Configuration.score(row, self.dice)  # 점수 계산
             index = row
             # UpperScore, UpperBonus 때문에 7보다 큰 인덱스는 2를 빼주어야 함.
             if row > 7:
                 index = row - 2
-            if self.player == 0:
-                # 선택한 카테고리 점수 적고 disable 시킴
-                self.players[self.player].setScore(score, index)
-                self.players[self.player].setAtUsed(index)
-                self.fields[row][self.player].configure(text=str(score))
 
-                # 상대방에게 선택한 카테고리의 점수를 전송
-                self.network.send(score)
-
-            elif self.player == 1:
-                # 상대방의 게임 화면에 점수를 업데이트
-                opponent_score = self.network.connect()
-                self.players[self.player].setScore(opponent_score, index)
-                self.players[self.player].setAtUsed(index)
-                self.fields[row][self.player].configure(text=str(opponent_score))
-
+            # 선택한 카테고리 점수 적고 disable 시킴
+            self.players[self.player].setScore(score, index)
+            self.players[self.player].setAtUsed(index)
+            self.fields[row][self.player].configure(text=str(score))
+            
+            # 상대방에게 선택한 카테고리의 점수와 인덱스를 전송
+            try:
+                n.send(str(score) + ',' + str(index))
+            except Exception as e:
+                print(e)
+                
             # UPPER category가 전부 사용되었으면, UpperScore, UpperBonus 계산
             if self.players[self.player].allUpperUsed():
                 self.fields[self.UPPERTOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore()))
@@ -208,7 +224,17 @@ class YahtzeeBoard:
                 else:
                     self.fields[self.TOTAL][self.player].configure(text=str(self.players[self.player].getUpperScore() +
                                                                             self.players[self.player].getLowerScore()))
+
             self.nextTurn()
 
+    def startThread(self, row):
+        thread = threading.Thread(target=self.categoryListener, args=(row,))
+        thread.daemon = True
+        thread.start()
 
-Yahtzee = YahtzeeBoard()
+    def startThread2(self):
+        thread = threading.Thread(target=self.receiveOpponentScore, args=())
+        thread.daemon = True
+        thread.start()
+
+Y = YahtzeeBoard()
